@@ -5,6 +5,38 @@
 #include <cstdio>
 #include <cstring>
 
+#ifdef _MSC_VER
+    #define LITEST_BREAK() __debugbreak()
+#elif defined(__has_builtin)
+    #if __has_builtin(__builtin_debugtrap)
+        #define LITEST_BREAK() __builtin_debugtrap()
+    #elif __has_builtin(__builtin_trap)
+        #define LITEST_BREAK() __builtin_trap()
+    #elif __has_include(<signal.h>)
+        #include <signal.h>
+        #ifdef (SIGTRAP)
+            #define LITEST_BREAK() raise(SIGTRAP)
+        #else
+            #define LITEST_BREAK() raise(SIGABRT)
+        #endif
+    #endif
+#else
+    #define LITEST_BREAK() (void)0 // out of luck
+#endif
+
+#ifndef LITEST_BREAK_ON_FAILURE
+    #ifndef NDEBUG
+        #define LITEST_BREAK_ON_FAILURE 1
+    #else
+        #define LITEST_BREAK_ON_FAILURE 0
+    #endif
+#endif
+
+#if !LITEST_BREAK_ON_FAILURE
+#undef LITEST_BREAK
+#define LITEST_BREAK() (void)0 // do nothing on release
+#endif
+
 #ifdef LITEST_RUN_TESTS
 namespace litest
 {
@@ -113,6 +145,7 @@ namespace litest
         { \
             auto file = strrchr(__FILE__, litest_path_sep) + 1; \
             std::printf("\t%s:%u:FAILED: [%s]\n", file, __LINE__, #cond); \
+            LITEST_BREAK(); \
             ++state->failed; \
         } \
         else \
