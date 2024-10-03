@@ -56,6 +56,8 @@ int main()
 }
 ```
 
+Additionally, the library will pause the debugger when any `ensure` check fails on debug builds. The feature can be configured by defining `LITEST_BREAK_ON_FAILURE` to be you desired value (1 to enable or 0 to disable).
+
 That's about all the API of the library. If you follow the given steps you should have a smooth experience with the library.
 
 
