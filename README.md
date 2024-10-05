@@ -2,8 +2,6 @@
 
 litest is a lightweight open source library for writing unit tests in C++. It aims to make testing your code as easy as possible.
 
-[Documentation](./docs.md)
-
 # Features
 
 - Easy to set up, just drop [litest.hpp](./litest.hpp) to your project, no dependencies needed.
@@ -37,18 +35,20 @@ test_suite (numbers) {
         number a{10};
         number b{20};
 
-        ensure(a + b == number{30}); // 3. Make sure your code works as intended with `ensure`.
+        ensure(a == number{10}); // 3. Make sure your code works as intended with `ensure`.
+        ensure(a + b == number{30}); // Note: this will be skipped if the previous `ensure` fails.
     }
 
     test (sub) {
         number a{10};
         number b{20};
 
+        check(!a.is_odd()); // 4. Use `check` for conditions that don't affect the rest of the asserts. Failed `check`s will still be reported but won't interrupt other asserts.
         ensure(a - b == number{-10});
     }
 }
 
-// 4. Make sure you write a `main` function. It should include code the program runs when not running tests.
+// 5. Make sure you write a `main` function. It should include code the program runs when not running tests.
 int main()
 {
     // Our program does nothing actually, we're just testing our `number` type.
@@ -56,7 +56,7 @@ int main()
 }
 ```
 
-Additionally, the library will pause the debugger when any `ensure` check fails on debug builds. The feature can be configured by defining `LITEST_BREAK_ON_FAILURE` to be you desired value (1 to enable or 0 to disable).
+Additionally, the library will pause the debugger when any `ensure`/`check` fails on debug builds. The feature can be configured by defining `LITEST_BREAK_ON_FAILURE` to be you desired value (1 to enable or 0 to disable).
 
 That's about all the API of the library. If you follow the given steps you should have a smooth experience with the library.
 
