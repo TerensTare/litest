@@ -1,9 +1,10 @@
+
 #pragma once
 
 #include <cinttypes>
 #include <cstdint>
 #include <cstdio>
-#include <cstring>
+
 
 #ifdef _MSC_VER
     #define LITEST_BREAK() __debugbreak()
@@ -47,14 +48,16 @@ namespace litest
 
     struct suite_state final
     {
-        std::uint32_t passed{};
-        std::uint32_t failed{};
+        std::uint16_t passed{};
+        std::uint16_t failed{};
+        std::uint16_t skipped{};
     };
 
     struct suite_node final
     {
         link_node node;
         const char *name;
+        const char *file;
         suite_state state;
         void (*suite)(suite_state *) = nullptr;
     };
@@ -74,12 +77,16 @@ namespace litest
         };
 
         visit(visit, suite_list, [&](suite_node *node) -> void {
-            std::printf("Running \"%s\"...\n", node->name);
+            char smallbuf[64];
+            auto len = std::snprintf(smallbuf, 64, "Running \"%s\"...", node->name);
+
+            std::printf("%-63s %18s\n", smallbuf, node->file);
 
             node->suite(&(node->state));
             
             global.failed += node->state.failed;
             global.passed += node->state.passed;
+            global.skipped += node->state.skipped;
         });
 
         std::printf("\nResults:\n========");
@@ -88,12 +95,14 @@ namespace litest
         suite_node total{
             link_node{&(suite_list->node)}, // .node
             "total", // .name
+            "",
             global, // .state
             nullptr, // .suite
         };
         // suite_node total{
         //     .node = {.next = &(suite_list->node)},
         //     .name = "total",
+        //     .file = "",
         //     .state = global,
         //     .suite = nullptr,
         // };
@@ -108,27 +117,52 @@ namespace litest
 
             std::printf("%s\n\t%s \x1b[0m", color, node->name);
             std::printf(
-                "=> %" PRIu32 " passed | %" PRIu32 " failed",
-                node->state.passed, node->state.failed
-            );
+                "=> %" PRIu32 " passed", node->state.passed);
+            
+            if (node->state.failed)
+            {
+                std::printf(" | %" PRIu32 " failed", node->state.failed);
+            }
+
+            if (node->state.skipped)
+            {
+                std::printf(" | %" PRIu32 " skipped", node->state.skipped);
+            }
         });
 
         return 0;
+    }
+
+    namespace impl
+    {
+        template <std::size_t N>
+        constexpr std::size_t string_length(char const (&)[N]) { return N; }
     }
 }
 
 #define test_suite(t) \
     static void t(::litest::suite_state *state); \
     inline static int litest_cat(_guard_, __LINE__) = [] { \
+        auto constexpr file = [](auto &&file) { \
+            for (auto n = ::litest::impl::string_length(file) - 1; n != 0; n--) \
+            { \
+                if (file[n] == litest_path_sep) \
+                    return file + n + 1; \
+            } \
+            return file + (*file == litest_path_sep); \
+        }(__FILE__); \
+        \
         static ::litest::suite_node node{ \
             ::litest::link_node{&(::litest::suite_list->node)}, \
             #t, \
+            file, \
             ::litest::suite_state{}, \
             t, \
         }; \
         /* static ::litest::suite_node node{ \
             .node = {.next = &(::litest::suite_list->node)}, \
             .name = #t, \
+            .file = file, \
             .suite = t, \
         }; */ \
         ::litest::suite_list = &node; \
@@ -137,16 +171,20 @@ namespace litest
     void t(::litest::suite_state *state)
     
 
-#define test(x) int litest_cat(x, _test_); (void)litest_cat(x, _test_);
+#define test(x) \
+    int litest_cat(x, _test_); (void)litest_cat(x, _test_); \
+    for (bool litest_skip = false; !litest_skip; litest_skip = true)
 
-#define ensure(cond) \
+#define litest_assert_impl(cond, break_cond) \
     do { \
+        if (litest_skip) { ++state->skipped; break; } \
+         \
         if (!(cond)) \
         { \
-            auto file = strrchr(__FILE__, litest_path_sep) + 1; \
-            std::printf("\t%s:%u:FAILED: [%s]\n", file, __LINE__, #cond); \
-            LITEST_BREAK(); \
+            std::printf("\tline %u: Assertion [%s] failed.\n", __LINE__, #cond); \
             ++state->failed; \
+            LITEST_BREAK(); \
+            break_cond(); \
         } \
         else \
         { \
@@ -172,5 +210,11 @@ namespace litest
 #else
 #define test_suite(x) void x()
 #define test(x) for (; 0;)
-#define ensure(x) void(x)
+#define litest_assert_impl(...) void(x)
 #endif
+
+#define litest_break_impl() litest_skip = true
+#define ensure(cond) litest_assert_impl(cond, litest_break_impl)
+
+#define litest_no_break_impl() (void)0
+#define check(cond) litest_assert_impl(cond, litest_no_break_impl)
